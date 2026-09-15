@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dino Survival</title>
+    <style>
+        :root {
+            --bg-day: #f7f7f7;
+            --text-day: #333333;
+            --bg-night: #1a1a1a;
+            --text-night: #e0e0e0;
+            --primary: #4ade80;
+            --accent: #ef4444;
+            --font-family: 'Courier New', Courier, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-day);
+            color: var(--text-day);
+            font-family: var(--font-family);
+            overflow: hidden;
+            transition: background-color 0.5s, color 0.5s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+
+        body.night {
+            background-color: var(--bg-night);
+            color: var(--text-night);
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            height: 300px;
+            border: 2px solid var(--text-day);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            background-color: transparent;
+        }
+
+        body.night #game-container {
+            border-color: var(--text-night);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI Elements */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .scores {
+            font-size: 1.2rem;
+            font-weight: bold;
+            display: flex;
+            gap: 20px;
+        }
+
+        .score-box {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .btn {
+            pointer-events: auto;
+            background-color: var(--text-day);
+            color: var(--bg-day);
+            border: none;
+            padding: 8px 16px;
+            font-family: var(--font-family);
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            text-transform: uppercase;
+            transition: transform 0.1s;
+        }
+
+        body.night .btn {
+            background-color: var(--text-night);
+            color: var(--bg-night);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        #shield-btn {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            padding: 6px 12px;
+            background-color: #3b82f6;
+            color: white;
+            font-size: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+            display: none; /* Shown via JS */
+            z-index: 5;
+            cursor: pointer;
+        }
+
+        #shield-btn.active {
+            background-color: #60a5fa;
+            box-shadow: 0 0 12px rgba(96, 165, 250, 0.9);
+        }
+
+        /* Overlays (Menus, Game Over) */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        body.night .overlay {
+            background: rgba(26,26,26,0.9);
+        }
+
+        .overlay.hidden {
+            display: none;
+        }
+
+        .modal-content {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 80%;
+            max-width: 400px;
+        }
+
+        h1, h2 {
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+
+        select {
+            padding: 8px;
+            font-family: var(--font-family);
+            background: var(--bg-day);
+            color: var(--text-day);
+            border: 2px solid var(--text-day);
+            border-radius: 4px;
+            width: 100%;
+            outline: none;
+        }
+
+        body.night select {
+            background: var(--bg-night);
+            color: var(--text-night);
+            border-color: var(--text-night);
+        }
+
+        .github-link {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            color: inherit;
+            text-decoration: underline;
+            word-break: break-all;
+        }
+
+        .warning-text {
+            color: var(--accent);
+            font-weight: bold;
+            font-size: 1.5rem;
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="300"></canvas>
+        
+        <div class="ui-layer">
+            <div class="top-bar">
+                <button id="settings-btn" class="btn">⚙️ <span data-i18n="settings">Настройки</span></button>
+                <div class="scores">
+                    <div class="score-box">
+                        <span data-i18n="hi">Рекорд</span>
+                        <span id="high-score">00000</span>
+                    </div>
+                    <div class="score-box">
+                        <span data-i18n="score">Счет</span>
+                        <span id="current-score">00000</span>
+                    </div>
+                </div>
+            </div>
+            <button id="shield-btn" class="btn" data-i18n="shield">Щит (S)</button>
+        </div>
+
+        <!-- Start / Game Over Screen -->
+        <div id="start-overlay" class="overlay">
+            <h1 data-i18n="title">Дино</h1>
+            <h2 id="game-over-text" style="display:none;" data-i18n="over">ИГРА ОКОНЧЕНА</h2>
+            <div class="modal-content">
+                <button id="play-btn" class="btn" data-i18n="play" style="font-size: 1.5rem; padding: 15px;">Играть</button>
+            </div>
+        </div>
+
+        <!-- Settings Screen -->
+        <div id="settings-overlay" class="overlay hidden">
+            <h2 data-i18n="settings">Настройки</h2>
+            <div class="modal-content">
+                <div>
+                    <label data-i18n="char">Персонаж</label>
+                    <select id="char-select">
+                        <option value="0" data-i18n="char0">Динозаврик</option>
+                        <option value="1" data-i18n="char1">Дино (Новый год)</option>
+                        <option value="2" data-i18n="char2">Петух</option>
+                        <option value="3" data-i18n="char3">Кот</option>
+                        <option value="4" data-i18n="char4">Утка</option>
+                        <option value="5" data-i18n="char5">Собака</option>
+                    </select>
+                </div>
+                <div>
+                    <label data-i18n="lang">Язык</label>
+                    <select id="lang-select">
+                        <option value="ru">🇷🇺 Русский</option>
+                        <option value="en">🇬🇧 English</option>
+                        <option value="zh">🇨🇳 中文</option>
+                        <option value="ar">🇸🇦 العربية</option>
+                        <option value="de">🇩🇪 Deutsch</option>
+                        <option value="fr">🇫🇷 Français</option>
+                        <option value="mk">🇲🇰 Македонски</option>
+                        <option value="jp">🇯🇵 日本語</option>
+                    </select>
+                </div>
+                <button id="save-settings-btn" class="btn" data-i18n="save">Сохранить</button>
+                <a href="https://github.com/berestnevnikolaj671-kot/Busya-Dino-Go-/tree/main" target="_blank" class="github-link">
+                    Мой проект на GitHub - https://github.com/berestnevnikolaj671-kot/Busya-Dino-Go-/tree/main
+                </a>
+            </div>
+        </div>
+
+        <div id="warning-text" class="warning-text"></div>
+    </div>
+
+    <script>
+        // Translations
+        const i18n = {
+            ru: { title: "Дино", play: "Играть", settings: "Настройки", char: "Персонаж", lang: "Язык", shield: "Щит (S)", score: "Счет", hi: "Рекорд", over: "ИГРА ОКОНЧЕНА", char0: "Динозаврик", char1: "Дино (Новый год)", char2: "Петух", char3: "Кот", char4: "Утка", char5: "Собака", save: "Сохранить" },
+            en: { title: "Dino", play: "Play", settings: "Settings", char: "Character", lang: "Language", shield: "Shield (S)", score: "Score", hi: "HI", over: "GAME OVER", char0: "Dinosaur", char1: "Santa Dino", char2: "Rooster", char3: "Cat", char4: "Duck", char5: "Dog", save: "Save" },
+            zh: { title: "恐龙", play: "玩", settings: "设置", char: "角色", lang: "语言", shield: "盾 (S)", score: "分数", hi: "最高分", over: "游戏结束", char0: "恐龙", char1: "圣诞恐龙", char2: "公鸡", char3: "猫", char4: "鸭子", char5: "狗", save: "保存" },
+            ar: { title: "ديناصور", play: "العب", settings: "الإعدادات", char: "الشخصية", lang: "اللغة", shield: "درع (S)", score: "النتيجة", hi: "أعلى", over: "انتهت اللعبة", char0: "ديناصور", char1: "ديناصور سانتا", char2: "ديك", char3: "قطة", char4: "بطة", char5: "كلب", save: "حفظ" },
+            de: { title: "Dino", play: "Spielen", settings: "Einstellungen", char: "Charakter", lang: "Sprache", shield: "Schild (S)", score: "Punkte", hi: "Rekord", over: "SPIEL VORBEI", char0: "Dinosaurier", char1: "Weihnachts-Dino", char2: "Hahn", char3: "Katze", char4: "Ente", char5: "Hund", save: "Speichern" },
+            fr: { title: "Dino", play: "Jouer", settings: "Paramètres", char: "Personnage", lang: "Langue", shield: "Bouclier (S)", score: "Score", hi: "Record", over: "FIN DE PARTIE", char0: "Dinosaure", char1: "Dino Noël", char2: "Coq", char3: "Chat", char4: "Canard", char5: "Chien", save: "Sauvegarder" },
+            mk: { title: "Дино", play: "Играј", settings: "Поставки", char: "Лик", lang: "Јазик", shield: "Штит (S)", score: "Резултат", hi: "Рекорд", over: "ИГРАТА ЗАВРШИ", char0: "Диносаурус", char1: "Дедо Мраз Дино", char2: "Петел", char3: "Мачка", char4: "Патка", char5: "Куче", save: "Зачувај" },
+            jp: { title: "ディノ", play: "プレイ", settings: "設定", char: "キャラクター", lang: "言語", shield: "シールド (S)", score: "スコア", hi: "ハイスコア", over: "ゲームオーバー", char0: "恐竜", char1: "サンタ恐竜", char2: "おんどり", char3: "猫", char4: "アヒル", char5: "犬", save: "保存" }
+        };
+
+        // State & Config
+        let currentLang = localStorage.getItem('dino_lang') || 'ru';
+        let currentChar = parseInt(localStorage.getItem('dino_char') || '0');
+        let highScore = parseInt(localStorage.getItem('dino_highscore') || '0');
+
+        // Update UI Text
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (i18n[currentLang] && i18n[currentLang][key]) {
+                    el.innerText = i18n[currentLang][key];
+                }
+            });
+            document.body.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
+        }
+        applyTranslations();
+
+        // Pixel Art Definitions (12x12 grids)
+        // 0=empty, 1=main(body), 2=secondary, 3=white, 4=black, 5=red, 6=orange, 7=yellow, 8=brown
+        const sprites = {
+            chars: [
+                // 0: Dino (Green)
+                [
+                    "       4444 ",
+                    "       4141 ",
+                    "       4444 ",
+                    "       444  ",
+                    " 4     44444",
+                    " 44   4444  ",
+                    " 444 4444   ",
+                    "  444444    ",
+                    "   44444    ",
+                    "    444     ",
+                    "    4 4     ",
+                    "   44 44    "
+                ],
+                // 1: Santa Dino (Green + Red Hat)
+                [
+                    "       555  ",
+                    "      35555 ",
+                    "      34444 ",
+                    "       4141 ",
+                    " 4     444  ",
+                    " 44   44444 ",
+                    " 444 4444   ",
+                    "  444444    ",
+                    "   44444    ",
+                    "    444     ",
+                    "    4 4     ",
+                    "   44 44    "
+                ],
+                // 2: Rooster (White/Red)
+                [
+                    "      555   ",
+                    "      333   ",
+                    "      34377 ",
+                    "      333   ",
+                    "  33333333  ",
+                    " 53333333   ",
+                    " 53333333   ",
+                    " 5 33333    ",
+                    "    333     ",
+                    "    7 7     ",
+                    "   77 77    ",
+                    "            "
+                ],
+                // 3: Cat (Orange/Black)
+                [
+                    "            ",
+                    "      6  6  ",
+                    "      6666  ",
+                    "      6464  ",
+                    "      6666  ",
+                    "  66666666  ",
+                    " 46666666   ",
+                    "  466666    ",
+                    "    666     ",
+                    "    6 6     ",
+                    "   66 66    ",
+                    "            "
+                ],
+                // 4: Duck (Yellow/Orange)
+                [
+                    "            ",
+                    "            ",
+                    "      777   ",
+                    "      74766 ",
+                    "      777   ",
+                    "   777777   ",
+                    "  7777777   ",
+                    "   77777    ",
+                    "    777     ",
+                    "    6 6     ",
+                    "   66 66    ",
+                    "            "
+                ],
+                // 5: Dog (Brown)
+                [
+                    "            ",
+                    "            ",
+                    "      888   ",
+                    "     48488  ",
+                    "     4888   ",
+                    "  8888888   ",
+                    " 3888888    ",
+                    "  88888     ",
+                    "    888     ",
+                    "    8 8     ",
+                    "   88 88    ",
+                    "            "
+                ]
+            ],
+            obstacles: {
+                cactus_small: [
+                    " 11 ",
+                    "1111",
+                    " 11 ",
+                    " 11 ",
+                    " 11 "
+                ],
+                cactus_large: [
+                    "  11  ",
+                    "  11  ",
+                    "1 11 1",
+                    "111111",
+                    " 1111 ",
+                    "  11  ",
+                    "  11  ",
+                    "  11  ",
+                    "  11  "
+                ],
+                cactus_double: [
+                    " 11  11 ",
+                    "11111111",
+                    " 11  11 ",
+                    " 11  11 ",
+                    " 11  11 "
+                ],
+                cactus_double_large: [
+                    "  11    11  ",
+                    "  11    11  ",
+                    "1 11 11 11 1",
+                    "111111111111",
+                    " 1111  1111 ",
+                    "  11    11  ",
+                    "  11    11  ",
+                    "  11    11  ",
+                    "  11    11  "
+                ],
+                cactus_mixed: [
+                    "  11      ",
+                    "  11      ",
+                    "1 11 1 11 ",
+                    "1111111111",
+                    " 1111  11 ",
+                    "  11   11 ",
+                    "  11   11 ",
+                    "  11   11 ",
+                    "  11   11 "
+                ],
+                cactus_triple: [
+                    "  11    11    11  ",
+                    "  11    11    11  ",
+                    "1 11 11 11 11 11 1",
+                    "111111111111111111",
+                    " 1111  1111  1111 ",
+                    "  11    11    11  ",
+                    "  11    11    11  ",
+                    "  11    11    11  ",
+                    "  11    11    11  "
+                ],
+                fire: [
+                    "    5       ",
+                    "   565      ",
+                    "  56765     ",
+                    " 5677765    ",
+                    " 5677765    ",
+                    "  56665     ",
+                    "   555      ",
+                    "            "
+                ],
+                bird_up: [
+                    "            ",
+                    "  44        ",
+                    "  4444      ",
+                    "4444444444  ",
+                    "  44444   4 ",
+                    "   44       ",
+                    "            ",
+                    "            "
+                ],
+                bird_down: [
+                    "            ",
+                    "            ",
+                    "   44       ",
+                    "4444444444  ",
+                    "  44444   4 ",
+                    "  4444      ",
+                    "  44        ",
+                    "            "
+                ]
+            }
+        };
+
+        const colors = {
+            '0': null,
+            '1': '#4ade80', // dino body (green)
+            '2': '#000000',
+            '3': '#ffffff', // white
+            '4': '#000000', // black
+            '5': '#ef4444', // red
+            '6': '#fb923c', // orange
+            '7': '#facc15', // yellow
+            '8': '#8b4513'  // brown
+        };
+
+        // Draw Helper
+        function drawSprite(ctx, art, x, y, size = 4, isNight = false) {
+            for (let row = 0; row < art.length; row++) {
+                for (let col = 0; col < art[row].length; col++) {
+                    const c = art[row][col];
+                    if (c && c !== ' ' && c !== '0') {
+                        let fill = colors[c];
+                        // Adapt some colors for night mode
+                        if (isNight && fill === '#000000') fill = '#ffffff';
+                        if (isNight && fill === '#ffffff' && c==='3') fill = '#aaaaaa';
+                        
+                        ctx.fillStyle = fill;
+                        ctx.fillRect(x + col * size, y + row * size, size, size);
+                    }
+                }
+            }
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 300;
+        const GROUND_Y = 250;
+        
+        let gameFrame = 0;
+        let score = 0;
+        let gameSpeed = 5;
+        let isPlaying = false;
+        let isNight = false;
+
+        let player;
+        let obstacles = [];
+        let lightnings = [];
+        let particles = [];
+
+        class Player {
+            constructor() {
+                this.w = 40;
+                this.h = 48;
+                this.x = 50;
+                this.y = GROUND_Y - this.h;
+                this.vy = 0;
+                this.gravity = 0.8;
+                this.jumpPower = -12;
+                this.isGrounded = true;
+                
+                this.shieldActive = false;
+                this.shieldTimer = 0;
+                this.lightningTargetTimer = 0; // if > 0, targeted
+            }
+
+            jump() {
+                if (this.isGrounded) {
+                    this.vy = this.jumpPower;
+                    this.isGrounded = false;
+                }
+            }
+
+            activateShield() {
+                if (!this.shieldActive) {
+                    this.shieldActive = true;
+                    this.shieldTimer = 180; // ~3 seconds at 60fps
+                    document.getElementById('shield-btn').classList.add('active');
+                }
+            }
+
+            update() {
+                this.y += this.vy;
+                if (this.y + this.h < GROUND_Y) {
+                    this.vy += this.gravity;
+                    this.isGrounded = false;
+                } else {
+                    this.vy = 0;
+                    this.y = GROUND_Y - this.h;
+                    this.isGrounded = true;
+                }
+
+                if (this.shieldActive) {
+                    this.shieldTimer--;
+                    if (this.shieldTimer <= 0) {
+                        this.shieldActive = false;
+                        document.getElementById('shield-btn').classList.remove('active');
+                    }
+                }
+
+                if (this.lightningTargetTimer > 0) {
+                    this.lightningTargetTimer--;
+                    if (this.lightningTargetTimer <= 0) {
+                        // STRIKE!
+                        strikePlayer();
+                    }
+                }
+            }
+
+            draw(ctx) {
+                // Draw Character
+                drawSprite(ctx, sprites.chars[currentChar], this.x, this.y, 4, isNight);
+
+                // Draw Shield Aura
+                if (this.shieldActive) {
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w/2 + 4, this.y + this.h/2, this.w, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+
+                // Draw Warning Timer if Targeted
+                if (this.lightningTargetTimer > 0) {
+                    const secs = Math.ceil(this.lightningTargetTimer / 60);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.font = '20px Courier New';
+                    ctx.fillText(`⚡ ${secs}s`, this.x, this.y - 15);
+                }
+            }
+        }
+
+        class Obstacle {
+            constructor(type, x, y) {
+                this.type = type; // 'cactus_...', 'bird', 'fire', 'ash'
+                this.x = x;
+                this.y = y;
+                this.markedForDeletion = false;
+                
+                if (type.startsWith('cactus')) {
+                    const sprite = sprites.obstacles[type];
+                    this.w = sprite[0].length * 4;
+                    this.h = sprite.length * 4;
+                    this.y = GROUND_Y - this.h;
+                } else if (type === 'bird') {
+                    this.w = 40;
+                    this.h = 32;
+                    this.y = GROUND_Y - this.h - Math.random() * 60 - 20;
+                } else if (type === 'fire') {
+                    this.w = sprites.obstacles.fire[0].length * 4;
+                    this.h = sprites.obstacles.fire.length * 4;
+                    this.y = GROUND_Y - this.h;
+                } else if (type === 'ash') {
+                    this.w = 32;
+                    this.y = GROUND_Y - 5;
+                    this.h = 5;
+                }
+            }
+
+            update() {
+                this.x -= gameSpeed;
+                if (this.x + this.w < 0) this.markedForDeletion = true;
+            }
+
+            draw(ctx) {
+                if (this.type.startsWith('cactus')) {
+                    drawSprite(ctx, sprites.obstacles[this.type], this.x, this.y, 4, isNight);
+                } else if (this.type === 'bird') {
+                    const frame = Math.floor(gameFrame / 15) % 2 === 0 ? sprites.obstacles.bird_up : sprites.obstacles.bird_down;
+                    drawSprite(ctx, frame, this.x, this.y, 4, isNight);
+                } else if (this.type === 'fire') {
+                    drawSprite(ctx, sprites.obstacles.fire, this.x, this.y, 4, false);
+                } else if (this.type === 'ash') {
+                    ctx.fillStyle = '#555';
+                    ctx.fillRect(this.x, this.y, this.w, this.h);
+                }
+            }
+        }
+
+        class LightningStrike {
+            constructor(targetType, targetObj = null) {
+                this.targetType = targetType; // 'ground', 'cactus'
+                this.targetObj = targetObj;
+                this.timer = 60; // 1 second warning
+                this.x = targetObj ? targetObj.x : GAME_WIDTH - 100 + Math.random() * 50;
+                this.markedForDeletion = false;
+                this.state = 'aiming'; // 'aiming', 'striking'
+            }
+
+            update() {
+                if (this.targetType === 'cactus' && this.targetObj) {
+                    this.x = this.targetObj.x;
+                } else if (this.targetType === 'ground') {
+                    this.x -= gameSpeed; // moves with ground
+                }
+
+                if (this.state === 'aiming') {
+                    this.timer--;
+                    if (this.timer <= 0) {
+                        this.state = 'striking';
+                        this.timer = 10; // flash duration
+                        this.resolveStrike();
+                    }
+                } else {
+                    this.timer--;
+                    if (this.timer <= 0) this.markedForDeletion = true;
+                }
+            }
+
+            resolveStrike() {
+                flashScreen();
+                if (this.targetType === 'cactus' && this.targetObj) {
+                    this.targetObj.type = 'ash'; // burned
+                } else if (this.targetType === 'ground') {
+                    obstacles.push(new Obstacle('fire', this.x, GROUND_Y));
+                }
+            }
+
+            draw(ctx) {
+                const centerX = this.targetObj ? this.x + this.targetObj.w / 2 : this.x + 16;
+                if (this.state === 'aiming') {
+                    ctx.strokeStyle = (gameFrame % 10 < 5) ? '#facc15' : 'transparent';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, 0);
+                    ctx.lineTo(centerX, GROUND_Y);
+                    ctx.stroke();
+                } else if (this.state === 'striking') {
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 8;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, 0);
+                    ctx.lineTo(centerX - 8, GROUND_Y / 2);
+                    ctx.lineTo(centerX + 8, GROUND_Y / 1.5);
+                    ctx.lineTo(centerX, GROUND_Y);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function spawnObstacle() {
+            if (gameFrame % (Math.max(60, 150 - Math.floor(score/10))) === 0) {
+                // Determine what to spawn
+                let type = 'cactus_small';
+                const cactusTypes = [
+                    'cactus_small', 'cactus_large', 
+                    'cactus_double', 'cactus_double_large', 
+                    'cactus_mixed', 'cactus_triple'
+                ];
+                type = cactusTypes[Math.floor(Math.random() * cactusTypes.length)];
+
+                if (score >= 1000 && Math.random() < 0.4) {
+                    type = 'bird';
+                }
+                obstacles.push(new Obstacle(type, GAME_WIDTH, 0));
+            }
+        }
+
+        function spawnLightning() {
+            if (score >= 1100 && Math.random() < 0.01) {
+                // Tier 2: Can target player (Score >= 2500)
+                if (score >= 2500 && Math.random() < 0.3 && player.lightningTargetTimer <= 0) {
+                    player.lightningTargetTimer = Math.floor(Math.random() * 300) + 120; // 2 to 7 seconds
+                    return;
+                }
+
+                // Tier 1: Target ground or cactus
+                let targetType = Math.random() < 0.5 ? 'ground' : 'cactus';
+                let targetObj = null;
+
+                if (targetType === 'cactus') {
+                    let cacti = obstacles.filter(o => o.type.startsWith('cactus') && o.x > GAME_WIDTH/2);
+                    if (cacti.length > 0) {
+                        targetObj = cacti[Math.floor(Math.random() * cacti.length)];
+                    } else {
+                        targetType = 'ground';
+                    }
+                }
+                lightnings.push(new LightningStrike(targetType, targetObj));
+            }
+        }
+
+        function strikePlayer() {
+            flashScreen();
+            if (player.shieldActive) {
+                // Survived
+                createParticles(player.x, player.y, '#3b82f6');
+                score += 50; // Bonus for blocking
+            } else {
+                gameOver();
+            }
+        }
+
+        function flashScreen() {
+            document.getElementById('game-container').style.backgroundColor = '#ffffff';
+            setTimeout(() => {
+                document.getElementById('game-container').style.backgroundColor = 'transparent';
+            }, 50);
+        }
+
+        function createParticles(x, y, color) {
+            // simple particle system could go here, omitting for simplicity/performance
+        }
+
+        function checkCollision(rect1, rect2) {
+            // Add a small forgiveness margin
+            const margin = 8;
+            return (
+                rect1.x < rect2.x + rect2.w - margin &&
+                rect1.x + rect1.w > rect2.x + margin &&
+                rect1.y < rect2.y + rect2.h - margin &&
+                rect1.y + rect1.h > rect2.y + margin
+            );
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('dino_highscore', highScore);
+            }
+            document.getElementById('start-overlay').classList.remove('hidden');
+            document.getElementById('game-over-text').style.display = 'block';
+            document.getElementById('shield-btn').style.display = 'none';
+        }
+
+        function resetGame() {
+            player = new Player();
+            obstacles = [];
+            lightnings = [];
+            score = 0;
+            gameSpeed = 6;
+            gameFrame = 0;
+            updateScoreUI();
+            
+            document.getElementById('start-overlay').classList.add('hidden');
+            document.getElementById('settings-overlay').classList.add('hidden');
+            document.getElementById('shield-btn').style.display = 'block';
+            document.getElementById('shield-btn').classList.remove('active');
+            
+            isPlaying = true;
+            gameLoop();
+        }
+
+        function updateScoreUI() {
+            const pad = (num, size) => ('000000000' + num).substr(-size);
+            document.getElementById('current-score').innerText = pad(Math.floor(score), 5);
+            document.getElementById('high-score').innerText = pad(Math.floor(highScore), 5);
+        }
+
+        function drawGround() {
+            ctx.strokeStyle = isNight ? '#555' : '#ccc';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND_Y);
+            ctx.lineTo(GAME_WIDTH, GROUND_Y);
+            ctx.stroke();
+
+            // Ground dots
+            ctx.fillStyle = isNight ? '#555' : '#ccc';
+            for(let i=0; i<10; i++){
+                let dx = ((gameFrame * gameSpeed * 0.5) + i*80) % GAME_WIDTH;
+                ctx.fillRect(GAME_WIDTH - dx, GROUND_Y + 5 + (i%3)*5, 3, 3);
+            }
+        }
+
+        function gameLoop() {
+            if (!isPlaying) return;
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+            // Day/Night Cycle
+            let currentPhase = Math.floor(score / 500) % 2;
+            if (currentPhase !== (isNight ? 1 : 0)) {
+                isNight = currentPhase === 1;
+                if (isNight) document.body.classList.add('night');
+                else document.body.classList.remove('night');
+            }
+
+            drawGround();
+
+            player.update();
+            player.draw(ctx);
+
+            spawnObstacle();
+            spawnLightning();
+
+            // Update & Draw Obstacles
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i];
+                obs.update();
+                obs.draw(ctx);
+
+                if (!obs.markedForDeletion && obs.type !== 'ash') {
+                    if (checkCollision(player, obs)) {
+                        gameOver();
+                    }
+                }
+
+                if (obs.markedForDeletion) {
+                    obstacles.splice(i, 1);
+                }
+            }
+
+            // Update & Draw Lightnings
+            for (let i = lightnings.length - 1; i >= 0; i--) {
+                let l = lightnings[i];
+                l.update();
+                l.draw(ctx);
+                if (l.markedForDeletion) lightnings.splice(i, 1);
+            }
+
+            // Score and Speed progression
+            score += 0.05;
+            if (score % 100 < 0.05) gameSpeed += 0.2;
+            
+            updateScoreUI();
+            gameFrame++;
+            requestAnimationFrame(gameLoop);
+        }
+
+        
+        // Input Handling
+        function handleJump(e) {
+            if ((e.code === 'Space' || e.code === 'ArrowUp') && isPlaying) {
+                e.preventDefault();
+                player.jump();
+            } else if (e.code === 'KeyS' && isPlaying) {
+                player.activateShield();
+            }
+        }
+
+        window.addEventListener('keydown', handleJump);
+        canvas.addEventListener('touchstart', (e) => {
+            if (isPlaying) player.jump();
+        });
+        canvas.addEventListener('mousedown', (e) => {
+            if (isPlaying) player.jump();
+        });
+
+        // UI Buttons
+        document.getElementById('play-btn').addEventListener('click', resetGame);
+        
+        document.getElementById('shield-btn').addEventListener('click', () => {
+            if (isPlaying) player.activateShield();
+        });
+        document.getElementById('shield-btn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isPlaying) player.activateShield();
+        });
+
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            document.getElementById('settings-overlay').classList.remove('hidden');
+            document.getElementById('lang-select').value = currentLang;
+            document.getElementById('char-select').value = currentChar;
+        });
+
+        document.getElementById('save-settings-btn').addEventListener('click', () => {
+            currentLang = document.getElementById('lang-select').value;
+            currentChar = parseInt(document.getElementById('char-select').value);
+            
+            localStorage.setItem('dino_lang', currentLang);
+            localStorage.setItem('dino_char', currentChar);
+            
+            applyTranslations();
+            document.getElementById('settings-overlay').classList.add('hidden');
+            
+            // Draw initial state to show selected character on idle
+            if (!isPlaying) {
+                ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+                drawGround();
+                drawSprite(ctx, sprites.chars[currentChar], 50, GROUND_Y - 48, 4, isNight);
+            }
+        });
+
+        // Init Display
+        updateScoreUI();
+        drawGround();
+        drawSprite(ctx, sprites.chars[currentChar], 50, GROUND_Y - 48, 4, isNight);
+
+    </script>
+</body>
+</html>
